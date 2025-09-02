@@ -1,0 +1,9 @@
+applications:
+- name: stabiliser-Price-module
+  memory: 128M
+  buildpacks:
+    - https://github.com/cloudfoundry/staticfile-buildpack.git
+  path: dist
+  env:
+    NODE_ENV: production
+  random-route: true

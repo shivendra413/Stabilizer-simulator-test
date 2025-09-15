@@ -78,6 +78,253 @@ interface ProcurementPlan {
   bomQty: number;
 }
 
+// Copper Hedging Component Interface
+interface CopperHedgingProps {
+  copperPredictions: Array<{month: string, predictedPrice: number, confidence: number}>;
+  setCopperPredictions: React.Dispatch<React.SetStateAction<Array<{month: string, predictedPrice: number, confidence: number}>>>;
+  hedgingStrategy: {spotPercentage: number, hedgedPercentage: number, avgHedgedPrice: number};
+  setHedgingStrategy: React.Dispatch<React.SetStateAction<{spotPercentage: number, hedgedPercentage: number, avgHedgedPrice: number}>>;
+  isLoadingPredictions: boolean;
+  setIsLoadingPredictions: React.Dispatch<React.SetStateAction<boolean>>;
+  currentCopperPrice: number;
+  copperAvgCost: number;
+  copperBomQty: number;
+  totalCost: number;
+  listPrice: number;
+  forecastUnits: number;
+}
+
+// Copper Hedging Component
+function CopperHedgingComponent({
+  copperPredictions,
+  setCopperPredictions,
+  hedgingStrategy,
+  setHedgingStrategy,
+  isLoadingPredictions,
+  setIsLoadingPredictions,
+  currentCopperPrice,
+  copperAvgCost,
+  copperBomQty,
+  totalCost,
+  listPrice,
+  forecastUnits
+}: CopperHedgingProps) {
+  
+  // Fetch copper price predictions
+  const fetchCopperPredictions = async () => {
+    setIsLoadingPredictions(true);
+    try {
+      // Generate mock predictions for now - in production you'd call real API
+      const currentDate = new Date();
+      const predictions = [];
+      
+      for (let i = 1; i <= 3; i++) {
+        const futureDate = new Date(currentDate);
+        futureDate.setMonth(futureDate.getMonth() + i);
+        const monthName = futureDate.toLocaleDateString('en', { month: 'short', year: 'numeric' });
+        
+        // Simulate price volatility based on market trends
+        const baseVariation = (Math.random() - 0.5) * 0.15; // ±15% variation
+        const trendFactor = i * 0.02; // 2% monthly trend
+        const predictedPrice = currentCopperPrice * (1 + baseVariation + trendFactor);
+        const confidence = Math.max(60, 85 - (i * 8)); // Decreasing confidence over time
+        
+        predictions.push({
+          month: monthName,
+          predictedPrice: Math.round(predictedPrice),
+          confidence
+        });
+      }
+      
+      setCopperPredictions(predictions);
+      
+      // Calculate optimal hedging strategy
+      const avgFuturePrice = predictions.reduce((sum, p) => sum + p.predictedPrice, 0) / predictions.length;
+      const priceVolatility = Math.abs(avgFuturePrice - currentCopperPrice) / currentCopperPrice;
+      
+      // Recommend higher hedging percentage for high volatility
+      const recommendedHedgedPercentage = Math.min(80, Math.max(20, priceVolatility * 200));
+      const recommendedSpotPercentage = 100 - recommendedHedgedPercentage;
+      
+      setHedgingStrategy({
+        spotPercentage: Math.round(recommendedSpotPercentage),
+        hedgedPercentage: Math.round(recommendedHedgedPercentage),
+        avgHedgedPrice: Math.round(avgFuturePrice)
+      });
+    } catch (error) {
+      console.error('Error fetching copper predictions:', error);
+    } finally {
+      setIsLoadingPredictions(false);
+    }
+  };
+  
+  // Calculate margin impact using avg cost as baseline for consistency
+  const calculateMarginImpact = () => {
+    const currentCopperCostPerUnit = copperBomQty * copperAvgCost;
+    const hedgedCopperCost = copperBomQty * ((hedgingStrategy.spotPercentage / 100) * currentCopperPrice + (hedgingStrategy.hedgedPercentage / 100) * hedgingStrategy.avgHedgedPrice);
+    const costDifference = hedgedCopperCost - currentCopperCostPerUnit;
+    const totalCostWithHedging = totalCost + costDifference;
+    const newMargin = listPrice - totalCostWithHedging;
+    const newMarginPct = listPrice > 0 ? (newMargin / listPrice) * 100 : 0;
+    const currentMarginPct = listPrice > 0 ? ((listPrice - totalCost) / listPrice) * 100 : 0;
+    const marginImpact = newMarginPct - currentMarginPct;
+    
+    return {
+      costDifference,
+      newMarginPct,
+      marginImpact,
+      totalCostWithHedging
+    };
+  };
+  
+  const marginAnalysis = calculateMarginImpact();
+  
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <h3 className="text-xl font-semibold text-blue-800">⚖️ Copper Hedging Strategy</h3>
+        <Button 
+          onClick={fetchCopperPredictions} 
+          disabled={isLoadingPredictions}
+          className="bg-blue-600 hover:bg-blue-700 text-white"
+        >
+          {isLoadingPredictions ? '🔄 Loading...' : '📊 Get Market Forecast'}
+        </Button>
+      </div>
+      
+      {/* Current Copper Info */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="bg-white/40 backdrop-blur-sm rounded-xl p-4">
+          <div className="text-sm text-gray-600">Current Copper Price</div>
+          <div className="text-2xl font-bold text-orange-600">{rupees(currentCopperPrice)}/KG</div>
+        </div>
+        <div className="bg-white/40 backdrop-blur-sm rounded-xl p-4">
+          <div className="text-sm text-gray-600">BOM Quantity</div>
+          <div className="text-2xl font-bold text-blue-600">{copperBomQty} KG/unit</div>
+        </div>
+        <div className="bg-white/40 backdrop-blur-sm rounded-xl p-4">
+          <div className="text-sm text-gray-600">Total Copper Need (forecast)</div>
+          <div className="text-2xl font-bold text-purple-600">{(copperBomQty * forecastUnits).toLocaleString()} KG</div>
+        </div>
+      </div>
+      
+      {/* Price Predictions */}
+      {copperPredictions.length > 0 && (
+        <div className="bg-white/40 backdrop-blur-sm rounded-xl p-6">
+          <h4 className="text-lg font-semibold text-gray-800 mb-4">📈 3-Month Price Forecast</h4>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {copperPredictions.map((prediction, index) => (
+              <div key={index} className="bg-white/60 rounded-lg p-4">
+                <div className="text-sm font-medium text-gray-700">{prediction.month}</div>
+                <div className="text-xl font-bold text-green-600">{rupees(prediction.predictedPrice)}/KG</div>
+                <div className="text-xs text-gray-500">Confidence: {prediction.confidence}%</div>
+                <div className={`text-sm ${prediction.predictedPrice > currentCopperPrice ? 'text-red-500' : 'text-green-500'}`}>
+                  {prediction.predictedPrice > currentCopperPrice ? '↗' : '↘'} 
+                  {Math.abs(((prediction.predictedPrice - currentCopperPrice) / currentCopperPrice) * 100).toFixed(1)}%
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      
+      {/* Hedging Strategy Recommendation */}
+      {copperPredictions.length > 0 && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="bg-white/40 backdrop-blur-sm rounded-xl p-6">
+            <h4 className="text-lg font-semibold text-gray-800 mb-4">🎯 Recommended Hedging Strategy</h4>
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <span>Spot Market:</span>
+                <span className="font-semibold text-blue-600">{hedgingStrategy.spotPercentage}%</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span>Hedge (Futures):</span>
+                <span className="font-semibold text-orange-600">{hedgingStrategy.hedgedPercentage}%</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span>Avg Hedged Price:</span>
+                <span className="font-semibold text-purple-600">{rupees(hedgingStrategy.avgHedgedPrice)}/KG</span>
+              </div>
+              
+              {/* Visual representation */}
+              <div className="mt-4">
+                <div className="text-sm text-gray-600 mb-2">Strategy Split:</div>
+                <div className="flex rounded-lg overflow-hidden h-6">
+                  <div 
+                    className="bg-blue-500 flex items-center justify-center text-white text-xs font-medium"
+                    style={{width: `${hedgingStrategy.spotPercentage}%`}}
+                  >
+                    {hedgingStrategy.spotPercentage > 20 ? `Spot ${hedgingStrategy.spotPercentage}%` : ''}
+                  </div>
+                  <div 
+                    className="bg-orange-500 flex items-center justify-center text-white text-xs font-medium"
+                    style={{width: `${hedgingStrategy.hedgedPercentage}%`}}
+                  >
+                    {hedgingStrategy.hedgedPercentage > 20 ? `Hedge ${hedgingStrategy.hedgedPercentage}%` : ''}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          {/* Margin Impact Analysis */}
+          <div className="bg-white/40 backdrop-blur-sm rounded-xl p-6">
+            <h4 className="text-lg font-semibold text-gray-800 mb-4">💰 Margin Impact Analysis</h4>
+            <div className="space-y-3">
+              <div className="flex justify-between">
+                <span>Cost Difference:</span>
+                <span className={`font-semibold ${marginAnalysis.costDifference >= 0 ? 'text-red-600' : 'text-green-600'}`}>
+                  {marginAnalysis.costDifference >= 0 ? '+' : ''}{rupees(marginAnalysis.costDifference)}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span>New Total Cost:</span>
+                <span className="font-semibold">{rupees(marginAnalysis.totalCostWithHedging)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>New Margin %:</span>
+                <span className="font-semibold text-blue-600">{marginAnalysis.newMarginPct.toFixed(1)}%</span>
+              </div>
+              <div className="flex justify-between border-t pt-2">
+                <span>Margin Impact:</span>
+                <span className={`font-bold text-lg ${marginAnalysis.marginImpact >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  {marginAnalysis.marginImpact >= 0 ? '+' : ''}{marginAnalysis.marginImpact.toFixed(2)}%
+                </span>
+              </div>
+            </div>
+            
+            <div className="mt-4 p-3 bg-blue-50 rounded-lg">
+              <div className="text-sm text-blue-800">
+                💡 <strong>Strategy Insight:</strong><br/>
+                {marginAnalysis.marginImpact >= 0 
+                  ? 'This hedging strategy could improve margins by protecting against unfavorable price movements.' 
+                  : 'This hedging strategy may reduce margins compared to current pricing, but provides price certainty and risk mitigation.'}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Charts for price trends */}
+      {copperPredictions.length > 0 && (
+        <div className="bg-white/40 backdrop-blur-sm rounded-xl p-6">
+          <h4 className="text-lg font-semibold text-gray-800 mb-4">📊 Price Trend Analysis</h4>
+          <ResponsiveContainer width="100%" height={300}>
+            <LineChart data={[{month: 'Current', price: currentCopperPrice}, ...copperPredictions.map(p => ({month: p.month, price: p.predictedPrice}))]}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="month" />
+              <YAxis />
+              <Tooltip formatter={(value) => [rupees(Number(value)), 'Price/KG']} />
+              <Line type="monotone" dataKey="price" stroke="#3B82F6" strokeWidth={3} dot={{fill: '#3B82F6', strokeWidth: 2, r: 5}} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function computeCostsWithInventory({
   sku,
   forecastUnits,
@@ -183,7 +430,6 @@ export default function StabiliserSimulator() {
     setMaterials(prev => prev.map((m, i) => i === index ? { ...m, [field]: value } : m));
   };
 
-  const totalProcurementSpend = result.procurementPlan.reduce((sum, p) => sum + p.spend, 0);
 
   // Chart data preparations
   const costBreakdownData = [
@@ -226,6 +472,11 @@ export default function StabiliserSimulator() {
 
   // Scenario comparison data 
   const [scenarios, setScenarios] = useState<Array<{name: string, result: any}>>([]);
+  
+  // Hedging functionality state
+  const [copperPredictions, setCopperPredictions] = useState<Array<{month: string, predictedPrice: number, confidence: number}>>([]);
+  const [hedgingStrategy, setHedgingStrategy] = useState<{spotPercentage: number, hedgedPercentage: number, avgHedgedPrice: number}>({spotPercentage: 100, hedgedPercentage: 0, avgHedgedPrice: 0});
+  const [isLoadingPredictions, setIsLoadingPredictions] = useState(false);
   
   const addScenario = () => {
     const scenarioName = `Scenario ${scenarios.length + 1}`;
@@ -384,10 +635,10 @@ export default function StabiliserSimulator() {
           {/* RIGHT: Results - Takes 3 columns */}
           <div className="xl:col-span-3">
             <GlassCard>
-              <Tabs defaultValue="procurement" className="w-full">
+              <Tabs defaultValue="hedging" className="w-full">
                 <TabsList className="grid w-full grid-cols-5 bg-white/30 mb-6">
-                  <TabsTrigger value="procurement" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white text-xs">
-                    📋 Procurement
+                  <TabsTrigger value="hedging" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white text-xs">
+                    ⚖️ Hedging
                   </TabsTrigger>
                   <TabsTrigger value="breakdown" className="data-[state=active]:bg-purple-500 data-[state=active]:text-white text-xs">
                     📊 Breakdown
@@ -403,41 +654,21 @@ export default function StabiliserSimulator() {
                   </TabsTrigger>
                 </TabsList>
 
-                <TabsContent value="procurement" className="space-y-4">
-                  <div className="flex justify-between items-center">
-                    <h3 className="text-xl font-semibold text-blue-800">Procurement Plan</h3>
-                    <div className="text-right">
-                      <div className="text-sm text-gray-600">Total Procurement Spend</div>
-                      <div className="text-2xl font-bold text-orange-600">{rupees(totalProcurementSpend)}</div>
-                    </div>
-                  </div>
-                  
-                  <div className="bg-white/40 backdrop-blur-sm rounded-xl p-4 overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead className="text-blue-700 font-semibold">
-                        <tr className="border-b border-blue-200">
-                          <th className="py-3 px-2 text-left">Material</th>
-                          <th className="py-3 px-2 text-right">Gross Req</th>
-                          <th className="py-3 px-2 text-right">On-hand</th>
-                          <th className="py-3 px-2 text-right">Procure</th>
-                          <th className="py-3 px-2 text-right">Spend</th>
-                          <th className="py-3 px-2 text-right">Avg Cost</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {result.procurementPlan.map((plan) => (
-                          <tr key={plan.id} className="border-b border-blue-100 hover:bg-blue-50/50">
-                            <td className="py-3 px-2 font-medium text-gray-800">{plan.name}</td>
-                            <td className="py-3 px-2 text-right">{plan.grossReq.toLocaleString()}</td>
-                            <td className="py-3 px-2 text-right text-green-600">{plan.onHand.toLocaleString()}</td>
-                            <td className="py-3 px-2 text-right text-orange-600">{plan.procureQty.toLocaleString()}</td>
-                            <td className="py-3 px-2 text-right font-semibold">{rupees(plan.spend)}</td>
-                            <td className="py-3 px-2 text-right text-purple-600 font-semibold">{rupees(plan.avgCost)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                <TabsContent value="hedging" className="space-y-6">
+                  <CopperHedgingComponent 
+                    copperPredictions={copperPredictions}
+                    setCopperPredictions={setCopperPredictions}
+                    hedgingStrategy={hedgingStrategy}
+                    setHedgingStrategy={setHedgingStrategy}
+                    isLoadingPredictions={isLoadingPredictions}
+                    setIsLoadingPredictions={setIsLoadingPredictions}
+                    currentCopperPrice={materials.find(m => m.id === 'M_COPPER')?.newPrice || 880}
+                    copperAvgCost={result.procurementPlan.find(p => p.id === 'M_COPPER')?.avgCost || 880}
+                    copperBomQty={materials.find(m => m.id === 'M_COPPER')?.bomQty || 2.5}
+                    totalCost={result.totalCost}
+                    listPrice={result.listPrice}
+                    forecastUnits={forecastUnits}
+                  />
                 </TabsContent>
 
                 <TabsContent value="breakdown" className="space-y-4">

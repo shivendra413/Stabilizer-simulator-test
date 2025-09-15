@@ -40,7 +40,7 @@
     "serve": "^14.2.4",
     "tailwindcss": "^3.3.3",
     "tailwindcss-animate": "^1.0.6",
-    "typescript": "^5.0.2",
+    "typescript": "^5.9.2",
     "vite": "^4.4.5"
   }
 }

@@ -1,5 +1,5 @@
 applications:
-- name: stabiliser-Price-module
+- name: Stabilizer-PriceFluctuation-Simulator
   memory: 128M
   buildpacks:
     - https://github.com/cloudfoundry/staticfile-buildpack.git
